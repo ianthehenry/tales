@@ -7,6 +7,7 @@ import Web.Scotty
 import Network.Wai.Middleware.RequestLogger
 import Control.Lens
 import Data.Monoid (mconcat)
+import Data.Functor ((<$>))
 
 type User = String
 data LogEntry = LogEntry {story :: Text, user :: User} deriving (Show, Eq)
@@ -19,7 +20,6 @@ currentUser (x:_) = user x
 -- /tales
 --   read [page] (if page is omitted, it returns the index. page is just the index of the entry)
 --   write username Text...
---   steal username (leaves an indelible mark on the book of tales, replacing characters from past entries with the block character)
 
 token = "MEv3EuIShbsE73cIMRd3C9d1"
 
@@ -41,7 +41,6 @@ tales = dispatch . firstWord
 main :: IO ()
 main = scotty 3000 $ do
   middleware logStdoutDev
-  post "/" $ do
-    args <- param "text"
-    text.fromStrict $ tales args
+  post "/" $ (text . fromStrict) =<<
+    tales <$> (param "text")
 
