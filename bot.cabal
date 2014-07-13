@@ -8,7 +8,7 @@ version:             0.1.0.0
 -- license:
 license-file:        LICENSE
 author:              Ian Henry
-maintainer:          ian@fogcreek.com
+maintainer:          ianthehenry@gmail.com
 -- copyright:
 -- category:
 build-type:          Simple
@@ -19,11 +19,12 @@ executable bot
   main-is:         Main.hs
   -- other-modules:
   -- other-extensions:
-  build-depends:       wai-extra >= 3.0.1,
+  build-depends:       transformers >= 0.4.1.0,
+                       wai-extra >= 3.0.1,
                        scotty >= 0.8.1,
                        wai >= 3.0.0.2,
                        http-types >= 0.8.5,
-                       base >=4.6 && <4.7
+                       base >=4.7 && <4.8
                      , text
                      , wreq
                      , lens
