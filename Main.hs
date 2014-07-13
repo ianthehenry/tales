@@ -78,7 +78,7 @@ tales requestor input book
 
 incomingMessage :: MVar BookOfTales -> ActionM ()
 incomingMessage bookVar = do
-  user <- param "user"
+  user <- param "user_name"
   input <- param "text"
   response <- liftIO $ modifyMVar bookVar (return . tales user input)
   text . fromStrict $ response
