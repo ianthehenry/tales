@@ -9,7 +9,7 @@ import Network.Wai.Middleware.RequestLogger
 import Control.Lens
 import Control.Monad.IO.Class (liftIO)
 import Data.Monoid (mconcat)
-import qualified Control.Concurrent.MVar as MVar
+import Control.Concurrent.MVar (MVar, modifyMVar, newMVar)
 
 type User = String
 data LogEntry = LogEntry User Text deriving (Show, Eq)
@@ -70,26 +70,22 @@ dispatch book ("write", input) = (uncurry $ writeBook book) (extractUser input)
 dispatch book ("steal", _)     = (book, "No; I took stealing out because it was unnecessarily complicated.")
 dispatch book (cmd, _)         = (book, mconcat ["Unrecognized command \"", cmd, "\". ", helperText])
 
-tales :: BookOfTales -> User -> Text -> (BookOfTales, Text)
-tales book requestor input
+tales :: User -> Text -> BookOfTales -> (BookOfTales, Text)
+tales requestor input book
   | requestor == holder book = dispatch book $ firstWord input
   | otherwise                = (book, "You do not hold the Book of Tales!")
 
-incomingMessage :: MVar.MVar BookOfTales -> ActionM ()
+incomingMessage :: MVar BookOfTales -> ActionM ()
 incomingMessage bookVar = do
   user <- param "user"
   input <- param "text"
-  book <- liftIO $ MVar.readMVar bookVar
-  let (newBook, response) = tales book user input
-  liftIO $ MVar.swapMVar bookVar newBook
+  response <- liftIO $ modifyMVar bookVar (return . tales user input)
   text . fromStrict $ response
 
 main :: IO ()
 main = do
-  let book = BookOfTales "ian" [LogEntry "current" "Another story that someone added", LogEntry "ian" "The book of tales is forged in the fires of Mount Haskell"]
-  db <- MVar.newMVar book
+  let book = BookOfTales "ian" [LogEntry "anonymous" "The Book of Tales is forged in the fires of Mount Haskell"]
+  db <- newMVar book
   scotty 3000 $ do
     middleware logStdoutDev
     post "/" (incomingMessage db)
-
-
