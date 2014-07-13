@@ -46,6 +46,7 @@ readBook book "" = bookIndex book
 readBook (BookOfTales _ entries) input = case readMaybe (unpack input) of
   Nothing -> "I don't understand that page number :/"
   Just n | n > 0 && n <= pageCount -> prettyPrintStory (entries !! (pageCount - n))
+         | n == 0                  -> "Get outta here with that"
          | otherwise               -> "Invalid page"
   where pageCount = Prelude.length entries
 
