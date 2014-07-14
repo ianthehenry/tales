@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Main where
-import Data.Text (Text, breakOn, stripStart, intercalate, pack, unpack, length)
+import Data.Text (Text, breakOn, stripStart, intercalate, pack, unpack, length, strip)
 import Text.Read (readMaybe)
 import Data.Text.Lazy (fromStrict)
 import Web.Scotty
@@ -16,11 +16,19 @@ import Database.HDBC.SqlValue (SqlValue, fromSql, toSql)
 import Data.Time (UTCTime, getCurrentTime)
 import Data.Time.Format (formatTime)
 import System.Locale (defaultTimeLocale)
+import Data.Text.IO (readFile, writeFile)
+import Prelude hiding (readFile, writeFile)
 
 type User = String
 data LogEntry = LogEntry User Text UTCTime deriving (Show, Eq)
 data BookOfTales = BookOfTales User [LogEntry] deriving (Show, Eq)
 data NewBook = SameBook | NewEntry User Text
+
+databasePath :: FilePath
+databasePath = "book.db"
+
+holderPath :: FilePath
+holderPath = "holder"
 
 holder :: BookOfTales -> User
 holder (BookOfTales h _) = h
@@ -95,6 +103,9 @@ insertLogEntry c newEntry = do
     execute insert (entryToSql newEntry)
     commit c
 
+recordNewHolder :: User -> IO ()
+recordNewHolder = writeFile holderPath . pack
+
 notifyNewHolder :: User -> IO ()
 notifyNewHolder user =
   print $ mconcat ["Passing to ", user]
@@ -111,6 +122,7 @@ incomingMessage bookVar conn = do
         time <- liftIO getCurrentTime
         let newEntry = LogEntry oldHolder story time
         liftIO $ insertLogEntry conn newEntry
+        liftIO $ recordNewHolder newHolder
         liftIO $ notifyNewHolder newHolder
         return (BookOfTales newHolder (newEntry:oldEntries), response)
         where (BookOfTales oldHolder oldEntries) = book)
@@ -125,11 +137,12 @@ initialBook c = do
   select <- prepare c "SELECT username, story, timestamp FROM entries ORDER BY timestamp DESC;"
   execute select []
   result <- fetchAllRows select
-  return $ BookOfTales "ian" (map entryFromSql result)
+  initialHolder <- fmap (unpack . strip) (readFile holderPath)
+  return $ BookOfTales initialHolder (map entryFromSql result)
 
 main :: IO ()
 main = do
-  conn <- connectSqlite3 "book.db"
+  conn <- connectSqlite3 databasePath
   book <- initialBook conn
   var <- newMVar book
   scotty 3000 $ do
