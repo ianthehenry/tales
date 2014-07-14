@@ -6,6 +6,7 @@ A "Do Something With Haskell" experiment. Converts outgoing webhooks from Slack 
 
     $ sqlite3 book.db ".read schema.sql"
     $ echo "yourname" > holder
+    $ echo "token" > token
     $ cabal run
 
 ## Not done yet

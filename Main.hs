@@ -3,7 +3,7 @@
 module Main where
 import Data.Text (Text, breakOn, stripStart, intercalate, pack, unpack, length, strip)
 import Text.Read (readMaybe)
-import Data.Text.Lazy (fromStrict)
+import Data.Text.Lazy (fromStrict, toStrict)
 import Web.Scotty
 import Network.Wai.Middleware.RequestLogger
 import Control.Lens
@@ -18,8 +18,14 @@ import Data.Time.Format (formatTime)
 import System.Locale (defaultTimeLocale)
 import Data.Text.IO (readFile, writeFile)
 import Prelude hiding (readFile, writeFile)
+import qualified Network.Wreq as Wreq
+import Network.Wreq (FormParam((:=)))
+import Data.Aeson (encode)
+import Data.Map (fromList, Map)
+import Data.Text.Lazy.Encoding (decodeUtf8)
 
 type User = String
+type Token = Text
 data LogEntry = LogEntry User Text UTCTime deriving (Show, Eq)
 data BookOfTales = BookOfTales User [LogEntry] deriving (Show, Eq)
 data NewBook = SameBook | NewEntry User Text
@@ -106,12 +112,20 @@ insertLogEntry c newEntry = do
 recordNewHolder :: User -> IO ()
 recordNewHolder = writeFile holderPath . pack
 
-notifyNewHolder :: User -> IO ()
-notifyNewHolder user =
-  print $ mconcat ["Passing to ", user]
+notifyNewHolder :: User -> Token -> IO ()
+notifyNewHolder user token = do
+  let message = fromList [("channel" :: String, "@" ++ user),
+                          ("username", "The Book of Tales"),
+                          ("text", "You wake to find a strange book on your bedside table. On its cover, the letters \"/tales\" are scrawled..."),
+                          ("icon_emoji", ":closed_book:")]
 
-incomingMessage :: MVar BookOfTales -> Connection -> ActionM ()
-incomingMessage bookVar conn = do
+  let path = "https://trello.slack.com/services/hooks/incoming-webhook"
+  let opts = Wreq.defaults & Wreq.param "token" .~ [token]
+  Wreq.postWith opts path ["payload" := encode message]
+  return ()
+
+incomingMessage :: MVar BookOfTales -> Connection -> Token -> ActionM ()
+incomingMessage bookVar conn token = do
   user <- param "user_name"
   input <- param "text"
 
@@ -123,7 +137,7 @@ incomingMessage bookVar conn = do
         let newEntry = LogEntry oldHolder story time
         liftIO $ insertLogEntry conn newEntry
         liftIO $ recordNewHolder newHolder
-        liftIO $ notifyNewHolder newHolder
+        liftIO $ notifyNewHolder newHolder token
         return (BookOfTales newHolder (newEntry:oldEntries), response)
         where (BookOfTales oldHolder oldEntries) = book)
 
@@ -145,6 +159,7 @@ main = do
   conn <- connectSqlite3 databasePath
   book <- initialBook conn
   var <- newMVar book
+  token <- readFile "token"
   scotty 3000 $ do
     middleware logStdoutDev
-    post "/" (incomingMessage var conn)
+    post "/" (incomingMessage var conn token)
